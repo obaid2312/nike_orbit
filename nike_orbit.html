@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nike Luxury Orbit Gallery</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      overflow: hidden;
+      background: #050505;
+      color: white;
+      height: 100vh;
+      transition: background 1.2s ease;
+    }
+
+    .ambient {
+      position: fixed;
+      inset: 0;
+      z-index: -3;
+      filter: blur(140px);
+      opacity: 0.7;
+      transition: background 1s ease;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.25), transparent 60%);
+    }
+
+    .noise {
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 4px 4px;
+      opacity: 0.05;
+      z-index: -2;
+      pointer-events: none;
+    }
+
+    .title {
+      position: absolute;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(2rem, 5vw, 4rem);
+      font-weight: 800;
+      letter-spacing: 12px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.9);
+      text-shadow: 0 0 20px rgba(255,255,255,0.2);
+      z-index: 20;
+    }
+
+    .orbit-wrapper {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      perspective: 2000px;
+    }
+
+    .orbit {
+      position: relative;
+      width: min(78vw, 700px);
+      height: min(78vw, 700px);
+      border-radius: 50%;
+    }
+
+    .ring {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 50%;
+      backdrop-filter: blur(10px);
+    }
+
+    .shoe-item {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      left: 50%;
+      top: 50%;
+      transform-style: preserve-3d;
+      cursor: pointer;
+      transition: transform 0.4s ease;
+    }
+
+    .shoe-item img {
+      mix-blend-mode: multiply;
+      background: transparent;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 20px 35px rgba(0,0,0,0.7));
+      transition: transform 0.5s ease, filter 0.5s ease;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .shoe-item:hover img {
+      transform: scale(1.12);
+      filter: drop-shadow(0 30px 50px rgba(255,255,255,0.2));
+    }
+
+    .center-stage {
+      position: absolute;
+      width: min(60vw, 700px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .main-shoe {
+      mix-blend-mode: multiply;
+      background: transparent;
+      width: 100%;
+      max-width: 700px;
+      object-fit: contain;
+      filter:
+        drop-shadow(0 50px 80px rgba(0,0,0,0.9))
+        blur(0px);
+      transform-style: preserve-3d;
+    }
+
+    .shoe-name {
+      margin-top: 10px;
+      font-size: clamp(1.5rem, 2vw, 2.4rem);
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.92);
+    }
+
+    .shoe-desc {
+      margin-top: 12px;
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.6);
+      max-width: 500px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .motion-blur {
+      animation: blurPulse 5s infinite alternate ease-in-out;
+    }
+
+    @keyframes blurPulse {
+      from {
+        filter: drop-shadow(0 50px 80px rgba(0,0,0,0.9)) blur(0px);
+      }
+      to {
+        filter: drop-shadow(0 70px 120px rgba(255,255,255,0.08)) blur(0.5px);
+      }
+    }
+
+    .gesture-cursor {
+      position: fixed;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 0 25px rgba(255,255,255,0.8);
+      pointer-events: none;
+      z-index: 999;
+      transform: translate(-50%, -50%);
+      transition: transform 0.08s linear;
+    }
+
+    .camera-status {
+      position: absolute;
+      bottom: 25px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.5);
+      font-size: 0.8rem;
+      letter-spacing: 2px;
+      z-index: 30;
+    }
+
+    video {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 240px;
+      height: 180px;
+      border-radius: 20px;
+      object-fit: cover;
+      opacity: 0.9;
+      z-index: 100;
+      border: 1px solid rgba(255,255,255,0.15);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      pointer-events: none;
+    }
+
+    @media (max-width: 1024px) {
+      .orbit {
+        width: min(82vw, 580px);
+        height: min(82vw, 580px);
+      }
+
+      .shoe-item {
+        width: 88px;
+        height: 88px;
+      }
+
+      .center-stage {
+        width: 72vw;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .orbit {
+        width: 92vw;
+        height: 92vw;
+      }
+
+      .shoe-item {
+        width: 68px;
+        height: 68px;
+      }
+
+      .main-shoe {
+        width: 90vw;
+        max-width: 420px;
+      }
+
+      .center-stage {
+        width: 92vw;
+      }
+
+      .title {
+        top: 24px;
+        letter-spacing: 6px;
+        font-size: 2rem;
+      }
+
+      video {
+        width: 140px;
+        height: 105px;
+        bottom: 12px;
+        right: 12px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .orbit {
+        width: 96vw;
+        height: 96vw;
+      }
+
+      .shoe-item {
+        width: 54px;
+        height: 54px;
+      }
+
+      .shoe-name {
+        font-size: 1rem;
+        letter-spacing: 2px;
+      }
+
+      .shoe-desc {
+        font-size: 0.72rem;
+        line-height: 1.4;
+        max-width: 88vw;
+      }
+
+      .camera-status {
+        bottom: 8px;
+        font-size: 0.6rem;
+      }
+
+      .gesture-cursor {
+        width: 18px;
+        height: 18px;
+      }
+    }
+
+      .shoe-item {
+        width: 70px;
+        height: 70px;
+      }
+
+      .shoe-name {
+        font-size: 1.2rem;
+      }
+
+      .shoe-desc {
+        font-size: 0.75rem;
+        padding: 0 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="ambient"></div>
+<div class="noise"></div>
+
+<div class="title">NIKE ORBIT</div>
+
+<div class="orbit-wrapper">
+  <div class="ring"></div>
+
+  <div class="center-stage">
+    <img class="main-shoe motion-blur" id="mainShoe" src="" alt="shoe" />
+    <div class="shoe-name" id="shoeName"></div>
+    <div class="shoe-desc" id="shoeDesc"></div>
+  </div>
+
+  <div class="orbit" id="orbit"></div>
+</div>
+
+<div class="camera-status">HAND TRACKING ENABLED</div>
+<video id="video" autoplay playsinline></video>
+<div class="gesture-cursor" id="gestureCursor"></div>
+
+<script>
+  const sneakers = [
+    {
+      name: 'AIR FORCE 1',
+      desc: 'Minimal luxury silhouette with clean monochrome dominance.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/160/328/original/1715426_01.jpg.jpeg?action=crop&width=1000',
+      color: '#f1f1f1'
+    },
+    {
+      name: 'AIR JORDAN',
+      desc: 'Classic basketball heritage fused with cinematic luxury aesthetics.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/448/676/original/1712085_01.jpg.jpeg?action=crop&width=1000',
+      color: '#5d8bff'
+    },
+    {
+      name: 'DUNK LOW',
+      desc: 'Streetwear icon engineered for premium visual contrast.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/530/812/original/1757327_01.jpg.jpeg?action=crop&width=1000',
+      color: '#ff5858'
+    },
+    {
+      name: 'AIR MAX 90',
+      desc: 'Layered textures with powerful futuristic geometry.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/351/134/original/1740779_01.jpg.jpeg?action=crop&width=600',
+      color: '#00bfa6'
+    },
+    {
+      name: 'VOMERO 5',
+      desc: 'Tech-runner aesthetics with metallic luxury detailing.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/176/688/original/1719280_01.jpg.jpeg?action=crop&width=1000',
+      color: '#ffe16b'
+    },
+    {
+      name: 'V2K RUN',
+      desc: 'Retro futuristic runner built for modern streetwear.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/530/216/original/1747313_01.jpg.jpeg?action=crop&width=1000',
+      color: '#bca7ff'
+    },
+    {
+      name: 'P-6000',
+      desc: 'Metallic runner with aggressive layered reflections.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/600/599/original/1716875_01.jpg.jpeg?action=crop&width=600',
+      color: '#7bc8ff'
+    },
+    {
+      name: 'AIR MAX 270',
+      desc: 'Cushioned futuristic silhouette with glow-ready proportions.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/112/426/279/original/1469452_01.jpg.jpeg?action=crop&width=1000',
+      color: '#ff7f50'
+    },
+    {
+      name: 'SB DUNK',
+      desc: 'Bold color storytelling with collector-level aesthetics.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/600/577/original/1713161_01.jpg.jpeg?action=crop&width=1000',
+      color: '#ff4d9d'
+    },
+    {
+      name: 'RUN THE JEWELS',
+      desc: 'Luxury purple palette with deep ambient visual energy.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/080/953/403/original/1004215_01.jpg.jpeg?action=crop&width=1000',
+      color: '#9f5cff'
+    },
+    {
+      name: 'BLAZER LOW',
+      desc: 'Vintage-inspired premium minimalism with timeless balance.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/106/990/669/original/1339725_01.jpg.jpeg?action=crop&width=1000',
+      color: '#e8d2a6'
+    },
+    {
+      name: 'AF1 BLACK',
+      desc: 'Dark luxury leather styling designed for premium atmospheres.',
+      img: 'https://image.goat.com/transform/v1/attachments/product_template_additional_pictures/images/116/112/796/original/1743075_01.jpg.jpeg?action=crop&width=1000',
+      color: '#888888'
+    }
+  ];
+
+  const orbit = document.getElementById('orbit');
+  const mainShoe = document.getElementById('mainShoe');
+  const shoeName = document.getElementById('shoeName');
+  const shoeDesc = document.getElementById('shoeDesc');
+  const ambient = document.querySelector('.ambient');
+
+  let current = 0;
+  let rotation = 0;
+
+  function createOrbit() {
+    const orbitSize = Math.min(window.innerWidth * 0.34, window.innerHeight * 0.28);
+    const radius = window.innerWidth < 700 ? orbitSize * 0.95 : orbitSize * 1.15;
+
+    orbit.innerHTML = '';
+
+    sneakers.forEach((shoe, i) => {
+      const item = document.createElement('div');
+      item.className = 'shoe-item';
+
+      const angle = (Math.PI * 2 / sneakers.length) * i;
+
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+
+      item.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+
+      item.innerHTML = `<img src="${shoe.img}" alt="${shoe.name}">`;
+
+      item.addEventListener('click', () => activate(i));
+
+      orbit.appendChild(item);
+    });
+  }
+
+  function activate(index) {
+    mainShoe.style.opacity = '1';
+    shoeName.style.opacity = '1';
+    shoeDesc.style.opacity = '1';
+    current = index;
+
+    const shoe = sneakers[index];
+
+    mainShoe.src = shoe.img;
+    shoeName.textContent = shoe.name;
+    shoeDesc.textContent = shoe.desc;
+
+    document.body.style.background = `radial-gradient(circle at center, ${shoe.color}15, #050505 55%)`;
+
+    ambient.style.background = `radial-gradient(circle at center, ${shoe.color}55, transparent 65%)`;
+
+    gsap.fromTo(
+      '.main-shoe',
+      {
+        scale: 0.8,
+        opacity: 0,
+        rotateY: -20
+      },
+      {
+        scale: 1,
+        opacity: 1,
+        rotateY: 0,
+        duration: 1,
+        ease: 'power4.out'
+      }
+    );
+
+    gsap.to('.main-shoe', {
+      y: -10,
+      repeat: -1,
+      yoyo: true,
+      duration: 2,
+      ease: 'sine.inOut'
+    });
+  }
+
+  createOrbit();
+
+// INITIAL EMPTY STATE
+mainShoe.style.opacity = '0';
+shoeName.style.opacity = '0';
+shoeDesc.style.opacity = '0';
+
+  // CONTINUOUS AUTO ROTATION
+  const orbitSpin = gsap.to('.orbit', {
+    rotate: '+=360',
+    repeat: -1,
+    duration: 60,
+    ease: 'none'
+  });
+
+  let drag = false;
+  let startX = 0;
+
+  window.addEventListener('mousedown', (e) => {
+    drag = true;
+    startX = e.clientX;
+  });
+
+  window.addEventListener('mouseup', () => {
+    drag = false;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!drag) return;
+
+    const delta = e.clientX - startX;
+    rotation += delta * 0.2;
+
+    gsap.to('.orbit', {
+      rotate: rotation,
+      duration: 0.5
+    });
+
+    startX = e.clientX;
+  });
+
+  // HAND TRACKING
+  const videoElement = document.getElementById('video');
+  const gestureCursor = document.getElementById('gestureCursor');
+
+  const hands = new Hands({
+    locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }
+  });
+
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7
+  });
+
+  let lastX = null;
+  let hoverTarget = null;
+  let fistClosed = false;
+  let hoverTimer = null;
+
+  hands.onResults((results) => {
+    if (results.multiHandLandmarks.length > 0) {
+      const hand = results.multiHandLandmarks[0];
+
+      const x = hand[8].x;
+      const y = hand[8].y;
+
+      const cursorX = window.innerWidth - (x * window.innerWidth);
+
+      // FIST DETECTION
+      const fingerTip = hand[8];
+      const fingerBase = hand[5];
+
+      const fingerDistance = Math.hypot(
+        fingerTip.x - fingerBase.x,
+        fingerTip.y - fingerBase.y
+      );
+
+      if (fingerDistance < 0.08 && !fistClosed) {
+        fistClosed = true;
+
+        // HIDE GESTURE CURSOR
+        gestureCursor.style.opacity = '0';
+        gestureCursor.style.transform = 'translate(-50%, -50%) scale(0)';
+
+        // REMOVE CENTER SHOE
+        gsap.to(['.main-shoe', '.shoe-name', '.shoe-desc'], {
+          opacity: 0,
+          scale: 0.8,
+          duration: 0.5,
+          ease: 'power3.out'
+        });
+
+        document.body.style.background = '#050505';
+        ambient.style.background = 'radial-gradient(circle at center, rgba(255,255,255,0.15), transparent 65%)';
+
+        // STOP HAND ROTATION CONTROL TEMPORARILY
+        return;
+      }
+
+      if (fingerDistance > 0.12) {
+        fistClosed = false;
+
+        // RESTORE CURSOR
+        gestureCursor.style.opacity = '1';
+        gestureCursor.style.transform = 'translate(-50%, -50%) scale(1)';
+      }
+      const cursorY = y * window.innerHeight;
+
+      gestureCursor.style.left = `${cursorX}px`;
+      gestureCursor.style.top = `${cursorY}px`;
+
+      if (!fistClosed && lastX !== null) {
+        const delta = x - lastX;
+
+        rotation += delta * 120;
+
+        gsap.to('.orbit', {
+          rotate: rotation,
+          duration: 0.4,
+          ease: 'power2.out',
+          overwrite: false
+        });
+      }
+
+      lastX = x;
+
+      // MAGNETIC HOVER SELECT
+      const items = document.querySelectorAll('.shoe-item');
+
+      let closestItem = null;
+      let closestDistance = Infinity;
+
+      items.forEach((item, index) => {
+        const rect = item.getBoundingClientRect();
+        const itemX = rect.left + rect.width / 2;
+        const itemY = rect.top + rect.height / 2;
+
+        const distance = Math.hypot(cursorX - itemX, cursorY - itemY);
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestItem = { item, index };
+        }
+
+        item.style.filter = 'brightness(1)';
+      });
+
+      if (closestItem && closestDistance < 120) {
+        gsap.to(gestureCursor, {
+          x: closestItem.item.getBoundingClientRect().left + 60 - cursorX,
+          y: closestItem.item.getBoundingClientRect().top + 60 - cursorY,
+          duration: 0.15
+        });
+
+        closestItem.item.style.filter = 'brightness(1.4)';
+
+        if (hoverTarget !== closestItem.index) {
+          hoverTarget = closestItem.index;
+
+          clearTimeout(hoverTimer);
+
+          hoverTimer = setTimeout(() => {
+            activate(hoverTarget);
+
+            gsap.fromTo(
+              closestItem.item,
+              { scale: 1 },
+              {
+                scale: 1.25,
+                duration: 0.3,
+                yoyo: true,
+                repeat: 1
+              }
+            );
+          }, 800);
+        }
+      } else {
+        hoverTarget = null;
+        clearTimeout(hoverTimer);
+      }
+    }
+  });
+
+  const camera = new Camera(videoElement, {
+    onFrame: async () => {
+      await hands.send({ image: videoElement });
+    },
+    width: 640,
+    height: 480
+  });
+
+  camera.start();
+
+  window.addEventListener('touchmove', (e) => {
+    rotation += e.touches[0].clientX * 0.002;
+
+    gsap.to('.orbit', {
+      rotate: rotation,
+      duration: 0.3,
+      overwrite: false
+    });
+  });
+
+  window.addEventListener('resize', () => {
+    createOrbit();
+  });
+</script>
+
+</body>
+</html>
